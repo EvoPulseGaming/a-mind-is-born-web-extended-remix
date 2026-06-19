@@ -71,8 +71,6 @@
   .panel{ background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:12px 13px; }
   .panel h2{ font-size:11px; font-weight:600; color:var(--dim); text-transform:uppercase; letter-spacing:.6px; margin:0 0 9px; }
   canvas#grid{ width:100%; display:block; }
-  .legend{ color:var(--dim); font-size:11px; margin-top:8px; }
-  .legend b{ color:var(--accent); font-weight:600; }
   #trace{ white-space:pre; font-size:12px; line-height:1.45; height:232px; overflow:hidden; color:#9a9aa8; }
   /* column header aligned to the monospace trace columns below it */
   .trace-head{ white-space:pre; font-size:12px; line-height:1.45; padding-bottom:5px; margin-bottom:6px;
@@ -96,7 +94,6 @@
   .scope-row canvas{ width:100%; display:block; }
   .scope-lbl{ position:absolute; top:4px; left:8px; font-size:9.5px; letter-spacing:.4px;
               text-transform:uppercase; pointer-events:none; opacity:.9; }
-  .foot{ color:var(--dim); font-size:12px; margin-top:14px; }
 </style>
 </head>
 <body>
@@ -137,17 +134,12 @@
         <div class="scope-row"><span class="scope-lbl" style="color:#6ad0ff">voice 2 · melody</span><canvas id="scope2" width="640" height="48"></canvas></div>
         <div class="scope-row"><span class="scope-lbl" style="color:#c08cff">voice 3 · drone</span><canvas id="scope3" width="640" height="48"></canvas></div>
       </div>
-      <p class="foot">The top wave is the sound you're hearing. The three below are the instruments inside it —
-         bass, melody, and a steady background drone. Even the colours in the video come straight from the
-         music: the same numbers are both heard and seen.</p>
     </div>
 
     <div>
       <div class="panel">
         <h2>The program's memory</h2>
         <canvas id="grid" width="466" height="470"></canvas>
-        <div class="legend">Every cell is one byte of memory. It <b style="color:#62b4ff">flashes</b> the moment the
-          computer uses it, then fades. The busy parts glow; the parts it never touches stay dark.</div>
       </div>
       <div class="panel" style="margin-top:14px;">
         <div class="trace-head"><span class="t-ad">addr</span>   <span class="t-by">bytes</span>    <span class="t-mn">instruction</span></div>
