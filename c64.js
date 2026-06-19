@@ -141,6 +141,8 @@ export class C64 {
 
   // Generate `n` audio samples (mono, -1..1) for the current SID state.
   renderAudio(buf, n){ this.sid.generate(buf, n); }
+  // Fill the combined mix plus each voice's individual waveform (vb = [v0,v1,v2]).
+  renderAudioSplit(mix, vb, n){ this.sid.generateSplit(mix, vb, n); }
 
   // ---- VIC-II extended-colour text rendering into an ImageData-sized RGBA buffer ----
   // 320x200 inner; we render the 40x25 char matrix.

@@ -85,6 +85,7 @@ export class SID {
     this.reg=new Uint8Array(0x20);
     this.v=[new Voice(),new Voice(),new Voice()];
     this.v[0].synced=this.v[2]; this.v[1].synced=this.v[0]; this.v[2].synced=this.v[1];
+    this._vout=new Float32Array(3);   // last raw per-voice output (post-envelope, pre-filter)
     // filter state (state-variable)
     this.lp=0; this.bp=0;
     this.vol=15; this.fmode=0; this.fcut=0; this.fres=0; this.froute=0;
@@ -128,6 +129,7 @@ export class SID {
       const v=this.v[i];
       v.clockEnv(this.sr);
       let s=v.output(this.cyclesPerSample);
+      this._vout[i]=s;
       if(this.froute&(1<<i)) filtered+=s; else direct+=s;
     }
     // state-variable filter
@@ -149,5 +151,14 @@ export class SID {
   }
   generate(buf, n){
     for(let i=0;i<n;i++) buf[i]=this.sample();
+  }
+  // Like generate(), but also captures each voice's raw (post-envelope, pre-filter)
+  // signal into vb = [v0, v1, v2], so the UI can scope the three voices individually.
+  generateSplit(mix, vb, n){
+    const a=vb[0], b=vb[1], c=vb[2];
+    for(let i=0;i<n;i++){
+      mix[i]=this.sample();
+      a[i]=this._vout[0]; b[i]=this._vout[1]; c[i]=this._vout[2];
+    }
   }
 }
