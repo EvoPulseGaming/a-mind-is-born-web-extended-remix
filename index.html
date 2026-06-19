@@ -92,8 +92,9 @@
   .scope-row{ position:relative; border-top:1px solid #14141c; }
   .scope-row:first-child{ border-top:0; }
   .scope-row canvas{ width:100%; display:block; }
-  .scope-lbl{ position:absolute; top:4px; left:8px; font-size:9.5px; letter-spacing:.4px;
-              text-transform:uppercase; pointer-events:none; opacity:.9; }
+  .scope-lbl{ position:absolute; top:5px; left:7px; font-size:9.5px; letter-spacing:.4px;
+              text-transform:uppercase; pointer-events:none; opacity:.92;
+              background:rgba(6,6,11,.82); padding:1px 6px 2px; border-radius:4px; }
 </style>
 </head>
 <body>
@@ -429,8 +430,10 @@ function drawScope(){
       if(v<mean-hyst) armed=true;
       else if(armed && v>=mean){ start=j; armed=false; }
     }
-    // draw the locked span across the width
-    ctx.clearRect(0,0,w,h);
+    // draw the locked span across the width — fade (don't clear) the previous frame so each
+    // sweep leaves a soft phosphor afterglow where it struck, decaying over a few frames
+    ctx.fillStyle='rgba(6,6,11,0.20)';
+    ctx.fillRect(0,0,w,h);
     ctx.strokeStyle='rgba(255,255,255,0.05)'; ctx.lineWidth=1;
     ctx.beginPath(); ctx.moveTo(0,mid); ctx.lineTo(w,mid); ctx.stroke();   // zero line
     ctx.strokeStyle=d.color; ctx.lineWidth=1; ctx.lineJoin='round'; ctx.beginPath();
