@@ -46,6 +46,13 @@
   /* fullscreen: stretch the canvas to the screen but letterbox to keep the 320:200 pixels square */
   .screen-frame:fullscreen{ aspect-ratio:auto; border:0; border-radius:0; background:#000; }
   .screen-frame:fullscreen canvas#screen{ width:100vw; height:100vh; object-fit:contain; }
+  /* live trace overlay — only shown in fullscreen, pinned to the bottom-right corner */
+  .fs-trace{ display:none; position:absolute; right:14px; bottom:14px; max-width:48%;
+             white-space:pre; line-height:1.45; color:#9a9aa8; pointer-events:none;
+             background:rgba(6,6,11,.52); border:1px solid rgba(255,255,255,.08); border-radius:6px;
+             padding:8px 11px; text-shadow:0 1px 2px rgba(0,0,0,.7); }
+  .fs-trace-head{ border-bottom:1px solid rgba(255,255,255,.12); padding-bottom:4px; margin-bottom:5px; color:var(--dim); }
+  .screen-frame:fullscreen .fs-trace{ display:block; font-size:clamp(11px,1.5vh,18px); }
   /* control bar: volume left · speed dropdown centered under the video · fullscreen right */
   .controls{ display:grid; grid-template-columns:1fr auto 1fr; gap:10px; align-items:center; margin:14px 0 4px; }
   .controls #vol{ justify-self:start; }
@@ -72,16 +79,16 @@
   .trace-head{ white-space:pre; font-size:12px; line-height:1.45; padding-bottom:5px; margin-bottom:6px;
                border-bottom:1px solid var(--line); color:var(--dim); }
   /* live-trace syntax highlighting */
-  #trace .cur{ background:rgba(255,230,109,.10); border-radius:2px; }   /* current instruction */
-  #trace .t-ad,.trace-head .t-ad{ color:#6f86b8; }    /* address      */
-  #trace .t-pn{ color:#4f5564; }                       /* punctuation  */
-  #trace .t-by,.trace-head .t-by{ color:#6a7186; }    /* raw bytes    */
-  #trace .t-mn,.trace-head .t-mn{ color:#c9a6ff; font-weight:600; }  /* mnemonic */
-  #trace .t-im{ color:#ffb454; }                       /* #$ immediate */
-  #trace .t-nu{ color:#6ad0ff; }                       /* $ hex value  */
-  #trace .t-rg{ color:#9aa0b4; }                       /* ,x / ,y reg  */
-  #trace .t-mk{ color:var(--accent); }                 /* IRQ / rti / restart markers */
-  #trace .t-dim{ color:#5a5a68; }
+  #trace .cur,.fs-trace .cur{ background:rgba(255,230,109,.10); border-radius:2px; }   /* current instruction */
+  #trace .t-ad,.fs-trace .t-ad,.trace-head .t-ad{ color:#6f86b8; }    /* address      */
+  #trace .t-pn,.fs-trace .t-pn{ color:#4f5564; }                       /* punctuation  */
+  #trace .t-by,.fs-trace .t-by,.trace-head .t-by{ color:#6a7186; }    /* raw bytes    */
+  #trace .t-mn,.fs-trace .t-mn,.trace-head .t-mn{ color:#c9a6ff; font-weight:600; }  /* mnemonic */
+  #trace .t-im,.fs-trace .t-im{ color:#ffb454; }                       /* #$ immediate */
+  #trace .t-nu,.fs-trace .t-nu{ color:#6ad0ff; }                       /* $ hex value  */
+  #trace .t-rg,.fs-trace .t-rg{ color:#9aa0b4; }                       /* ,x / ,y reg  */
+  #trace .t-mk,.fs-trace .t-mk{ color:var(--accent); }                 /* IRQ / rti / restart markers */
+  #trace .t-dim,.fs-trace .t-dim{ color:#5a5a68; }
   .regs{ display:flex; gap:14px; flex-wrap:wrap; margin-top:10px; color:var(--dim); font-size:12px; }
   .regs b{ color:var(--fg); font-weight:600; }
   .scopes{ margin-top:16px; background:#06060b; border:1px solid var(--line); border-radius:6px; overflow:hidden; }
@@ -110,6 +117,7 @@
     <div>
       <div class="screen-frame">
         <canvas id="screen" width="320" height="200"></canvas>
+        <div class="fs-trace" id="fsTrace" aria-hidden="true"><div class="fs-trace-head"><span class="t-ad">addr</span>   <span class="t-by">bytes</span>    <span class="t-mn">instruction</span></div><div class="fs-trace-body" id="fsTraceBody"></div></div>
         <div class="overlay" id="overlay"><div class="play"><div class="btn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6.5 L18 12 L9 17.5 Z" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg></div><small>click to run · audio on</small></div></div>
       </div>
       <div class="controls">
@@ -268,12 +276,14 @@ $('speed').addEventListener('change', e=>applySpeed(e.target.value));
 applySpeed($('speed').value);   // sync state to whatever the browser restored (avoids a silent rt/slow mismatch on reload)
 
 // ---- fullscreen the video frame only (canvas + its black letterbox, nothing else) ----
-const fsBtn=$('fs');
+const fsBtn=$('fs'), fsTraceBody=$('fsTraceBody');
+let fsActive=false;            // true while the frame is fullscreen -> mirror the trace into the corner overlay
 const reqFS=screenFrame.requestFullscreen||screenFrame.webkitRequestFullscreen;
 const exitFS=document.exitFullscreen||document.webkitExitFullscreen;
 const fsEl=()=>document.fullscreenElement||document.webkitFullscreenElement;
 fsBtn.addEventListener('click', ()=>{ if(fsEl()) exitFS&&exitFS.call(document); else reqFS&&reqFS.call(screenFrame); });
 function onFsChange(){ const on=fsEl()===screenFrame;
+  fsActive=on;
   fsBtn.title = on ? 'Exit fullscreen (Esc)' : 'Fullscreen video';
   fsBtn.setAttribute('aria-label', fsBtn.title); }
 document.addEventListener('fullscreenchange', onFsChange);
@@ -361,15 +371,16 @@ function hiTrace(line){
   const lead=line.match(/^(\s*)(.*)$/);     // marker line: keep indentation, colour the text
   return `${lead[1]}<span class="t-mk">${escHtml(lead[2])}</span>`;
 }
+function setTraceHTML(html){ traceEl.innerHTML=html; if(fsActive) fsTraceBody.innerHTML=html; }   // mirror into the fullscreen corner overlay
 function renderTrace(lines){   // last line = current instruction (highlighted)
-  traceEl.innerHTML = lines.map((l,i)=> i===lines.length-1 ? `<span class="cur">${hiTrace(l)}</span>` : hiTrace(l)).join('\n');
+  setTraceHTML(lines.map((l,i)=> i===lines.length-1 ? `<span class="cur">${hiTrace(l)}</span>` : hiTrace(l)).join('\n'));
 }
 const MARK=[null,'—— IRQ enter ——','rti  (irq exit)','jsr $e544 (clear screen)','jmp ($fffc)  → restart'];
 function drawTrace(){
   if(realtime){
     // real-time is driven by runFrame() inside the audio callback, so we read the CPU's own
     // recent-execution ring and show the same scrolling instruction stream as the slow modes.
-    if(!m.totalCycles){ traceEl.innerHTML='<span class="t-dim">starting…</span>'; return; }
+    if(!m.totalCycles){ setTraceHTML('<span class="t-dim">starting…</span>'); return; }
     const N=m.traceN, W=m.traceW, A=m.traceAddr, K=m.traceKind, lines=[];
     for(let i=15;i>=1;i--){
       const idx=(W-i+N)&(N-1), k=K[idx], a=A[idx];
