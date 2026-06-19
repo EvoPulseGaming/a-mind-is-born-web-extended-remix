@@ -36,12 +36,12 @@
   .overlay{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(4,4,8,.72); cursor:pointer; transition:opacity .3s; }
   .overlay.hidden{ opacity:0; pointer-events:none; }
   .play .btn{ display:flex; align-items:center; justify-content:center; width:68px; height:68px; margin:0 auto 12px;
-              color:var(--accent); border:1.5px solid var(--accent); border-radius:50%; background:rgba(136,224,137,.10);
-              box-shadow:0 0 22px rgba(136,224,137,.18), 0 6px 18px rgba(0,0,0,.40);
+              color:#fff; border:1.5px solid #fff; border-radius:50%; background:rgba(255,255,255,.10);
+              box-shadow:0 0 22px rgba(255,255,255,.18), 0 6px 18px rgba(0,0,0,.40);
               transition:transform .2s ease, background .2s ease, box-shadow .2s ease; }
   .play .btn svg{ width:30px; height:30px; display:block; }
-  .overlay:hover .btn{ transform:scale(1.06); background:rgba(136,224,137,.18);
-              box-shadow:0 0 30px rgba(136,224,137,.32), 0 6px 18px rgba(0,0,0,.40); }
+  .overlay:hover .btn{ transform:scale(1.06); background:rgba(255,255,255,.18);
+              box-shadow:0 0 30px rgba(255,255,255,.34), 0 6px 18px rgba(0,0,0,.40); }
   .play small{ display:block; text-align:center; color:#fff; font-weight:600; letter-spacing:.2px; text-shadow:0 1px 3px rgba(0,0,0,.65); }
   /* fullscreen: stretch the canvas to the screen but letterbox to keep the 320:200 pixels square */
   .screen-frame:fullscreen{ aspect-ratio:auto; border:0; border-radius:0; background:#000; }
@@ -68,8 +68,20 @@
   .legend{ color:var(--dim); font-size:11px; margin-top:8px; }
   .legend b{ color:var(--accent); font-weight:600; }
   #trace{ white-space:pre; font-size:12px; line-height:1.45; height:232px; overflow:hidden; color:#9a9aa8; }
-  #trace .cur{ color:var(--hot); }
-  #trace .mark{ color:var(--accent); }
+  /* column header aligned to the monospace trace columns below it */
+  .trace-head{ white-space:pre; font-size:12px; line-height:1.45; padding-bottom:5px; margin-bottom:6px;
+               border-bottom:1px solid var(--line); color:var(--dim); }
+  /* live-trace syntax highlighting */
+  #trace .cur{ background:rgba(255,230,109,.10); border-radius:2px; }   /* current instruction */
+  #trace .t-ad,.trace-head .t-ad{ color:#6f86b8; }    /* address      */
+  #trace .t-pn{ color:#4f5564; }                       /* punctuation  */
+  #trace .t-by,.trace-head .t-by{ color:#6a7186; }    /* raw bytes    */
+  #trace .t-mn,.trace-head .t-mn{ color:#c9a6ff; font-weight:600; }  /* mnemonic */
+  #trace .t-im{ color:#ffb454; }                       /* #$ immediate */
+  #trace .t-nu{ color:#6ad0ff; }                       /* $ hex value  */
+  #trace .t-rg{ color:#9aa0b4; }                       /* ,x / ,y reg  */
+  #trace .t-mk{ color:var(--accent); }                 /* IRQ / rti / restart markers */
+  #trace .t-dim{ color:#5a5a68; }
   .regs{ display:flex; gap:14px; flex-wrap:wrap; margin-top:10px; color:var(--dim); font-size:12px; }
   .regs b{ color:var(--fg); font-weight:600; }
   .scopes{ margin-top:16px; background:#06060b; border:1px solid var(--line); border-radius:6px; overflow:hidden; }
@@ -104,6 +116,7 @@
         <input type="range" id="vol" min="0" max="100" value="62" aria-label="volume" title="volume">
         <select id="speed" aria-label="speed" autocomplete="off">
           <option value="rt">real-time + audio</option>
+          <option value="4000000">insane · 4000000 ip/s</option>
           <option value="400000">turbo · 400000 ip/s</option>
           <option value="40000">fast · 40000 ip/s</option>
           <option value="4000">slow · 4000 ip/s</option>
@@ -133,7 +146,7 @@
           tables stay dark. The loader copies the program here, so the code even rewrites itself live.</div>
       </div>
       <div class="panel" style="margin-top:14px;">
-        <h2>Live disassembly trace</h2>
+        <div class="trace-head"><span class="t-ad">addr</span>   <span class="t-by">bytes</span>    <span class="t-mn">disassembly</span></div>
         <div id="trace"></div>
         <div class="regs">
           <span>A=<b id="rA">00</b></span><span>X=<b id="rX">00</b></span><span>Y=<b id="rY">00</b></span>
@@ -274,7 +287,7 @@ function draw(){
   requestAnimationFrame(draw);
   if(!m) return;
   // advance emulation in slow modes (real-time is advanced by the audio callback)
-  if(!realtime && speedIps>0 && !paused){ stepAccum+=speedIps/60; let n=0; while(stepAccum>=1 && n++<20000){ doStep(); stepAccum--; } }
+  if(!realtime && speedIps>0 && !paused){ stepAccum+=speedIps/60; let n=0; while(stepAccum>=1 && n++<80000){ doStep(); stepAccum--; } }
 
   // video
   m.renderVideo(img.data); sctx.putImageData(img,0,0);
@@ -334,23 +347,40 @@ function drawGrid(){
   }
 }
 
+// ---- syntax-highlight a trace line ("$addr: bytes  mnem oper", or an indented marker) ----
+const escHtml=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+function hiOps(s){            // s = the operand tail, including its leading space
+  return escHtml(s)
+    .replace(/#\$[0-9a-f]+/gi, t=>`<span class="t-im">${t}</span>`)              // #$xx immediate
+    .replace(/(^|[^#>])(\$[0-9a-f]+)/gi, (_,p,h)=>`${p}<span class="t-nu">${h}</span>`)  // $xx / $xxxx
+    .replace(/,([xy])\b/gi, (_,r)=>`,<span class="t-rg">${r}</span>`);            // ,x / ,y
+}
+function hiTrace(line){
+  const m=line.match(/^(\$[0-9a-f]{4}): (.{8}) (\S+)(.*)$/i);
+  if(m) return `<span class="t-ad">${m[1]}</span><span class="t-pn">:</span> `+
+               `<span class="t-by">${m[2]}</span> `+
+               `<span class="t-mn">${m[3]}</span>${hiOps(m[4])}`;
+  const lead=line.match(/^(\s*)(.*)$/);     // marker line: keep indentation, colour the text
+  return `${lead[1]}<span class="t-mk">${escHtml(lead[2])}</span>`;
+}
 function drawTrace(){
   if(realtime){
     // sample the instruction at the current PC so there's something live to read
     const c=m.cpu, a=c.pc;
-    let cur='(running at full speed — pick a slow speed to read along)';
-    if(a<=0xff || (a>=0x800&&a<=0x8ff)){ const d=disasm(rd,a); cur=`$${hx4(a)}: ${d.text}`; }
-    traceEl.innerHTML = `<span class="cur">▸ ${cur}</span>\n\n`+
-      '   the trace scrolls thousands of\n   instructions per second here in\n   real time. slow it down to step\n   through the code line by line.';
+    let head;
+    if(a<=0xff || (a>=0x800&&a<=0x8ff)){
+      const d=disasm(rd,a), b=d.bytes.map(hx2).join(' ').padEnd(8);
+      head=`<span class="cur">${hiTrace(`$${hx4(a)}: ${b} ${d.text}`)}</span>`;
+    } else head='<span class="t-dim">(running at full speed — pick a slow speed to read along)</span>';
+    traceEl.innerHTML = head+'\n\n'+
+      '<span class="t-dim">   the trace scrolls thousands of\n   instructions per second here in\n   real time. slow it down to step\n   through the code line by line.</span>';
     return;
   }
   const last=traceLines.slice(-15);
-  const html=last.map((l,i)=>{
-    const isCur=i===last.length-1;
-    const cls=l.includes('——')||l.includes('exit')||l.includes('restart')||l.includes('clear')?'mark':(isCur?'cur':'');
-    return cls?`<span class="${cls}">${l}</span>`:l;
+  traceEl.innerHTML = last.map((l,i)=>{
+    const inner=hiTrace(l);
+    return i===last.length-1 ? `<span class="cur">${inner}</span>` : inner;
   }).join('\n');
-  traceEl.innerHTML=html;
 }
 
 // Light the source the same way the hex grid lights its cells: electric-blue flare on
