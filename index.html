@@ -96,14 +96,14 @@
 <body>
 <div class="app">
 <aside class="source">
-  <h2>Source · zero-page program</h2>
+  <h2>The program</h2>
   <div id="src"></div>
-  <div class="srcfoot">The original 6502 source, comments stripped. Each line flares as its byte
-     executes — slow the speed and the <b style="color:var(--hot)">yellow cursor</b> follows the CPU.</div>
+  <div class="srcfoot">This is the actual code. Each line lights up the moment the computer runs it —
+     slow the speed down and the <b style="color:var(--hot)">yellow marker</b> follows along.</div>
 </aside>
 <div class="wrap">
   <h1>A&nbsp;Mind&nbsp;Is&nbsp;Born — live</h1>
-  <p class="sub">The exact 256 bytes executing, with every byte lit as the CPU runs it.
+  <p class="sub">Everything you see and hear comes from one tiny program — just 256 bytes — running live, right here.
      <a href="https://linusakesson.net/scene/a-mind-is-born/" target="_blank" rel="noopener">original ↗</a></p>
 
   <div class="grid2">
@@ -131,22 +131,20 @@
         <div class="scope-row"><span class="scope-lbl" style="color:#6ad0ff">voice 2 · melody</span><canvas id="scope2" width="640" height="48"></canvas></div>
         <div class="scope-row"><span class="scope-lbl" style="color:#c08cff">voice 3 · drone</span><canvas id="scope3" width="640" height="48"></canvas></div>
       </div>
-      <p class="foot">Top scope is the audio mix; below it, each SID voice on its own — voice&nbsp;1
-         (kick&nbsp;+&nbsp;bass), voice&nbsp;2 (melody, which the script wakes up around bar&nbsp;8), voice&nbsp;3 (drone).
-         The colours of the flowing visuals are SID register bytes copied straight into the VIC chip —
-         same numbers heard and seen. Switch to a slow speed to read the code as it runs.</p>
+      <p class="foot">The top wave is the sound you're hearing. The three below are the instruments inside it —
+         bass, melody, and a steady background drone. Even the colours in the video come straight from the
+         music: the same numbers are both heard and seen.</p>
     </div>
 
     <div>
       <div class="panel">
-        <h2>Zero page $00–$FF · the running program</h2>
+        <h2>The program's memory</h2>
         <canvas id="grid" width="466" height="470"></canvas>
-        <div class="legend">Each cell is one byte. It flares <b>bright</b> the instant it executes, then
-          fades (phosphor). Watch the tight main-loop glow, the interrupt handler pulse, and the data
-          tables stay dark. The loader copies the program here, so the code even rewrites itself live.</div>
+        <div class="legend">Every square is one byte of memory. It flashes <b>bright</b> the moment the
+          computer uses it, then fades. The busy parts glow; the parts it never touches stay dark.</div>
       </div>
       <div class="panel" style="margin-top:14px;">
-        <div class="trace-head"><span class="t-ad">addr</span>   <span class="t-by">bytes</span>    <span class="t-mn">disassembly</span></div>
+        <div class="trace-head"><span class="t-ad">addr</span>   <span class="t-by">bytes</span>    <span class="t-mn">instruction</span></div>
         <div id="trace"></div>
         <div class="regs">
           <span>A=<b id="rA">00</b></span><span>X=<b id="rX">00</b></span><span>Y=<b id="rY">00</b></span>
