@@ -37,8 +37,11 @@
   .overlay.hidden{ opacity:0; pointer-events:none; }
   .play .btn{ font-size:30px; color:var(--accent); border:1px solid var(--accent); border-radius:50%; width:66px; height:66px; line-height:62px; margin:0 auto 10px; text-align:center; }
   .play small{ color:var(--dim); display:block; text-align:center; }
-  /* push the fullscreen button to the far right of the controls bar */
+  /* controls bar: speed dropdown gets its own row; transport + volume sit below it,
+     with the fullscreen button pinned to the right of that row on wide screens. */
+  .controls .speed-ctl{ flex-basis:100%; }
   button.ctl#fs{ margin-left:auto; }
+  @media(max-width:820px){ button.ctl#fs{ margin-left:0; } }   /* single-column: flow inline, no floating gap */
   /* fullscreen: stretch the canvas to the screen but letterbox to keep the 320:200 pixels square */
   .screen-frame:fullscreen{ aspect-ratio:auto; border:0; border-radius:0; background:#000; }
   .screen-frame:fullscreen canvas#screen{ width:100vw; height:100vh; object-fit:contain; }
@@ -87,7 +90,7 @@
         <div class="overlay" id="overlay"><div class="play"><div class="btn">▶</div><small>click to run · audio on</small></div></div>
       </div>
       <div class="controls">
-        <label>speed
+        <label class="speed-ctl">speed
           <select id="speed" autocomplete="off">
             <option value="rt">real-time + audio</option>
             <option value="400000">turbo · 400000 ip/s</option>
