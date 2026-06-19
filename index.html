@@ -459,14 +459,17 @@ function drawScope(){
     ctx.clearRect(0,0,w,h);
     ctx.strokeStyle='rgba(255,255,255,0.05)'; ctx.lineWidth=1;
     ctx.beginPath(); ctx.moveTo(0,mid); ctx.lineTo(w,mid); ctx.stroke();   // centre line
-    ctx.strokeStyle=d.color; ctx.lineWidth=1; ctx.lineJoin='round'; ctx.beginPath();
+    ctx.strokeStyle=d.color; ctx.lineJoin='round'; ctx.lineCap='round'; ctx.beginPath();
     for(let j=0;j<SCOPE_SPAN;j++){
       let y=mid - (buf[(scopeW+start+j)&SCOPE_MASK]-m2)*vg;
       if(y<0.5)y=0.5; else if(y>h-0.5)y=h-0.5;
       const x=j*w/SCOPE_SPAN;
       j?ctx.lineTo(x,y):ctx.moveTo(x,y);
     }
-    ctx.stroke();
+    // bloom: a soft blurred glow pass in the trace colour, then a crisp core on top
+    ctx.shadowColor=d.color; ctx.shadowBlur=9; ctx.lineWidth=1.6; ctx.stroke();
+    ctx.shadowBlur=4; ctx.lineWidth=1.2; ctx.stroke();
+    ctx.shadowBlur=0; ctx.lineWidth=1; ctx.stroke();
   }
 }
 requestAnimationFrame(draw);
