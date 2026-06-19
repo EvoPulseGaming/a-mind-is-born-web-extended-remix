@@ -37,15 +37,20 @@
   .overlay.hidden{ opacity:0; pointer-events:none; }
   .play .btn{ font-size:30px; color:var(--accent); border:1px solid var(--accent); border-radius:50%; width:66px; height:66px; line-height:62px; margin:0 auto 10px; text-align:center; }
   .play small{ color:var(--dim); display:block; text-align:center; }
-  /* controls bar: speed dropdown gets its own row; transport + volume sit below it,
-     with the fullscreen button pinned to the right of that row on wide screens. */
-  .controls .speed-ctl{ flex-basis:100%; }
-  button.ctl#fs{ margin-left:auto; }
-  @media(max-width:820px){ button.ctl#fs{ margin-left:0; } }   /* single-column: flow inline, no floating gap */
   /* fullscreen: stretch the canvas to the screen but letterbox to keep the 320:200 pixels square */
   .screen-frame:fullscreen{ aspect-ratio:auto; border:0; border-radius:0; background:#000; }
   .screen-frame:fullscreen canvas#screen{ width:100vw; height:100vh; object-fit:contain; }
-  .controls{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:14px 0 4px; }
+  /* control bar: volume left · speed dropdown centered under the video · fullscreen right */
+  .controls{ display:grid; grid-template-columns:1fr auto 1fr; gap:10px; align-items:center; margin:14px 0 4px; }
+  .controls #vol{ justify-self:start; }
+  .controls #speed{ justify-self:center; }
+  .controls #fs{ justify-self:end; }
+  @media(max-width:520px){   /* narrow: speed centered on top, volume + fullscreen below */
+    .controls{ grid-template-columns:1fr 1fr; grid-template-areas:"speed speed" "vol fs"; row-gap:12px; }
+    .controls #speed{ grid-area:speed; }
+    .controls #vol{ grid-area:vol; }
+    .controls #fs{ grid-area:fs; }
+  }
   select,button.ctl{ background:#14141c; color:var(--fg); border:1px solid #2a2a38; border-radius:5px; padding:6px 11px; cursor:pointer; font:inherit; }
   button.ctl:hover,select:hover{ border-color:var(--accent); color:var(--accent); }
   button.ctl:disabled{ opacity:.35; cursor:default; color:var(--fg); border-color:#2a2a38; }
@@ -90,18 +95,15 @@
         <div class="overlay" id="overlay"><div class="play"><div class="btn">▶</div><small>click to run · audio on</small></div></div>
       </div>
       <div class="controls">
-        <label class="speed-ctl">speed
-          <select id="speed" autocomplete="off">
-            <option value="rt">real-time + audio</option>
-            <option value="400000">turbo · 400000 ip/s</option>
-            <option value="40000">fast · 40000 ip/s</option>
-            <option value="4000">slow · 4000 ip/s</option>
-            <option value="400">crawl · 400 ip/s</option>
-            <option value="40">creep · 40 ip/s</option>
-          </select>
-        </label>
-        <button class="ctl" id="restart">⟲ restart</button>
-        <label>vol <input type="range" id="vol" min="0" max="100" value="62"></label>
+        <input type="range" id="vol" min="0" max="100" value="62" aria-label="volume" title="volume">
+        <select id="speed" aria-label="speed" autocomplete="off">
+          <option value="rt">real-time + audio</option>
+          <option value="400000">turbo · 400000 ip/s</option>
+          <option value="40000">fast · 40000 ip/s</option>
+          <option value="4000">slow · 4000 ip/s</option>
+          <option value="400">crawl · 400 ip/s</option>
+          <option value="40">creep · 40 ip/s</option>
+        </select>
         <button class="ctl" id="fs" type="button" title="Fullscreen video" aria-label="Fullscreen video">⛶ fullscreen</button>
       </div>
       <div class="scopes">
@@ -229,8 +231,6 @@ function boot(){
 }
 
 overlay.addEventListener('click', async ()=>{ if(!m) boot(); await actx.resume(); overlay.classList.add('hidden'); });
-$('restart').addEventListener('click', ()=>{ if(m){ m.init(); rHead=rTail=0; everHit.fill(0); traceLines.length=0;
-  if(curLineEl){ curLineEl.classList.remove('cur'); curLineEl=null; } } });
 $('vol').addEventListener('input', ()=>{ if(gain) gain.gain.value=$('vol').value/100; });
 function applySpeed(v){
   if(v==='rt'){ realtime=true; rHead=rTail=0; if(actx) actx.resume(); }
@@ -287,21 +287,29 @@ function drawGrid(){
   for(let c=0;c<16;c++) gctx.fillText(c.toString(16),L+c*cw+cw/2,8);
   gctx.textAlign='right';
   for(let r=0;r<16;r++) gctx.fillText('$'+(r*16).toString(16).padStart(2,'0'),L-3,Tp+r*ch+ch/2);
+  gctx.textAlign='center';
   for(let i=0;i<256;i++){
     const r=i>>4,c=i&15, x=L+c*cw, y=Tp+r*ch, h=Math.min(1,heat[i]);
-    // background: dark floor; code cells faint blue; hot -> green->white
+    // background: dark floor; cold code faint blue; hot -> electric-blue phosphor that blooms
     let R,G,B;
-    if(h>0.02){ R=30+h*220|0; G=40+h*200|0; B=50+h*120|0; }
-    else if(everHit[i]){ R=16;G=22;B=34; }      // cold code
-    else { R=11;G=11;B=16; }                     // never-executed (data / unused)
+    if(h>0.02){
+      R=20+h*120|0; G=55+h*165|0; B=95+h*160|0;          // deep blue -> bright azure-white core
+      gctx.shadowColor=`rgba(40,140,255,${(0.4+h*0.5).toFixed(2)})`;
+      gctx.shadowBlur=2+h*11;                             // bloom grows with heat
+    } else {
+      gctx.shadowBlur=0;
+      if(everHit[i]){ R=16;G=22;B=34; }                  // cold code
+      else { R=11;G=11;B=16; }                           // never-executed (data / unused)
+    }
     gctx.fillStyle=`rgb(${R},${G},${B})`;
     gctx.fillRect(x+0.5,y+0.5,cw-1,ch-1);
-    // byte value
+    // byte value (no glow, so the digits stay crisp)
+    gctx.shadowBlur=0;
     const v=ram[i];
     gctx.fillStyle = h>0.5?'#0a0a0f':(everHit[i]?'#aab0c0':'#3a3a48');
-    gctx.textAlign='center';
     gctx.fillText(hx2(v),x+cw/2,y+ch/2+0.5);
   }
+  gctx.shadowBlur=0;
   // current PC outline (slow modes)
   if(!realtime && curPC>=0){
     const r=curPC>>4,c=curPC&15;
@@ -329,9 +337,9 @@ function drawTrace(){
   traceEl.innerHTML=html;
 }
 
-// Light the source the same way the hex grid lights its cells: green flare on execute,
-// phosphor fade, faint blue resting tint for code that has ever run, plus the yellow
-// PC cursor in slow modes (mirrors the grid's outlined cell).
+// Light the source the same way the hex grid lights its cells: electric-blue flare on
+// execute (with a glow bloom), phosphor fade, faint blue resting tint for code that has
+// ever run, plus the yellow PC cursor in slow modes (mirrors the grid's outlined cell).
 function drawSource(){
   const heat=m.heat;
   for(const el of litLines){
@@ -340,12 +348,13 @@ function drawSource(){
     if(el._k===key) continue;
     el._k=key;
     if(hot){
-      el.style.background=`rgba(120,224,137,${(0.12+h*0.34).toFixed(3)})`;
-      el.style.color=`rgb(${150+(h*55|0)},${205+(h*50|0)},${150+(h*55|0)})`;
+      el.style.background=`rgba(40,140,255,${(0.10+h*0.34).toFixed(3)})`;
+      el.style.color=`rgb(${120+(h*70|0)},${190+(h*45|0)},255)`;
+      el.style.textShadow=`0 0 ${(2+h*8).toFixed(1)}px rgba(70,160,255,${(0.3+h*0.5).toFixed(2)})`;
     } else if(ever){
-      el.style.background='rgba(116,150,224,0.07)'; el.style.color='';   // cold code
+      el.style.background='rgba(116,150,224,0.07)'; el.style.color=''; el.style.textShadow='';   // cold code
     } else {
-      el.style.background=''; el.style.color='';                        // data / never run
+      el.style.background=''; el.style.color=''; el.style.textShadow='';                         // data / never run
     }
   }
   const want = (!realtime && curPC>=0) ? cellLine[curPC] : null;
