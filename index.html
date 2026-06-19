@@ -153,7 +153,7 @@ for(const s of scopeDefs){ s.ctx=s.cv.getContext('2d'); s.w=s.cv.width; s.h=s.cv
 let actx=null,node=null,gain=null,m=null, rd=null;
 let sampleRate=44100, samplesPerFrame=735, realtime=true, speedIps=0, stepAccum=0;
 let ring=new Float32Array(1<<16), rHead=0, rTail=0, frameBuf=null, voiceBufs=null;
-const SCOPE_N=1024;
+const SCOPE_N=4096, SCOPE_MASK=SCOPE_N-1, SCOPE_SPAN=1024;   // ring length, mask, samples drawn per trace
 const scopeBufs=[0,1,2,3].map(()=>new Float32Array(SCOPE_N)); let scopeW=0;
 const everHit=new Uint8Array(256);
 const traceLines=[]; let curPC=-1;
@@ -338,17 +338,34 @@ function drawSource(){
   }
 }
 
+// Oscilloscope with a trigger, so the traces stand still instead of scrolling.
+// Each frame we lock the sweep to the most-recent rising crossing of the signal's
+// mean (with hysteresis), exactly like a real scope's edge trigger — same phase
+// every frame => a stable, non-flickering standing wave.
 function drawScope(){
   for(let k=0;k<scopeDefs.length;k++){
     const d=scopeDefs[k], ctx=d.ctx, w=d.w, h=d.h, buf=scopeBufs[k], mid=h/2, vg=(mid-3)*d.amp;
+    // pass 1: mean (trigger level, DC-tolerant) + extent (for hysteresis)
+    let sum=0, mn=1e9, mx=-1e9;
+    for(let j=0;j<SCOPE_N;j++){ const v=buf[(scopeW+j)&SCOPE_MASK]; sum+=v; if(v<mn)mn=v; if(v>mx)mx=v; }
+    const mean=sum/SCOPE_N, hyst=(mx-mn)*0.05;
+    // pass 2: find the latest rising mean-crossing that leaves a full span to draw
+    let start=SCOPE_N-SCOPE_SPAN, armed=false;
+    for(let j=1;j<=SCOPE_N-SCOPE_SPAN;j++){
+      const v=buf[(scopeW+j)&SCOPE_MASK];
+      if(v<mean-hyst) armed=true;
+      else if(armed && v>=mean){ start=j; armed=false; }
+    }
+    // draw the locked span across the width
     ctx.clearRect(0,0,w,h);
     ctx.strokeStyle='rgba(255,255,255,0.05)'; ctx.lineWidth=1;
     ctx.beginPath(); ctx.moveTo(0,mid); ctx.lineTo(w,mid); ctx.stroke();   // zero line
-    ctx.strokeStyle=d.color; ctx.lineWidth=1; ctx.beginPath();
-    for(let x=0;x<w;x++){
-      let y=mid - buf[(scopeW+((x/w*SCOPE_N)|0))&(SCOPE_N-1)]*vg;
+    ctx.strokeStyle=d.color; ctx.lineWidth=1; ctx.lineJoin='round'; ctx.beginPath();
+    for(let j=0;j<SCOPE_SPAN;j++){
+      let y=mid - buf[(scopeW+start+j)&SCOPE_MASK]*vg;
       if(y<0.5)y=0.5; else if(y>h-0.5)y=h-0.5;
-      x?ctx.lineTo(x,y):ctx.moveTo(x,y);
+      const x=j*w/SCOPE_SPAN;
+      j?ctx.lineTo(x,y):ctx.moveTo(x,y);
     }
     ctx.stroke();
   }
