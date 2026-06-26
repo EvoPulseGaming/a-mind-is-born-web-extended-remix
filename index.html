@@ -52,14 +52,21 @@
              padding:8px 11px; text-shadow:0 1px 2px rgba(0,0,0,.7); }
   .fs-trace-head{ border-bottom:1px solid rgba(255,255,255,.12); padding-bottom:4px; margin-bottom:5px; color:var(--dim); }
   .screen-frame:fullscreen .fs-trace{ display:block; font-size:clamp(11px,1.5vh,18px); }
+  .screen-frame:fullscreen.no-fs-trace .fs-trace{ display:none; }   /* toggled off by the "Show in fullscreen" checkbox */
+  /* "Show in fullscreen" toggle, sitting in the trace panel */
+  .fs-show{ display:flex; justify-content:flex-end; align-items:center; gap:6px; margin:-2px 0 8px;
+            color:var(--dim); font-size:11.5px; cursor:pointer; user-select:none; }
+  .fs-show input{ accent-color:var(--accent); cursor:pointer; margin:0; }
   /* control bar: volume left · speed dropdown centered under the video · fullscreen right */
   .controls{ display:grid; grid-template-columns:1fr auto 1fr; gap:10px; align-items:center; margin:14px 0 4px; }
   .controls #vol{ justify-self:start; }
-  .controls #speed{ justify-self:center; }
+  .controls .speedwrap{ justify-self:center; display:flex; flex-direction:column; align-items:center; gap:5px; }
+  .warp-lbl{ display:flex; align-items:center; gap:5px; color:var(--dim); font-size:11px; cursor:pointer; user-select:none; }
+  .warp-lbl input{ accent-color:var(--accent); cursor:pointer; margin:0; }
   .controls #fs{ justify-self:end; }
   @media(max-width:520px){   /* narrow: speed centered on top, volume + fullscreen below */
     .controls{ grid-template-columns:1fr 1fr; grid-template-areas:"speed speed" "vol fs"; row-gap:12px; }
-    .controls #speed{ grid-area:speed; }
+    .controls .speedwrap{ grid-area:speed; }
     .controls #vol{ grid-area:vol; }
     .controls #fs{ grid-area:fs; }
   }
@@ -112,7 +119,12 @@
   .scenes #sceneBtns{ display:contents; }
   .scenes .scene-lbl{ color:#4f4f5e; font-size:9.5px; text-transform:uppercase; letter-spacing:.5px; }
   .scenes .scene-save{ color:var(--dim); }
-  .scenes .user-scene{ border-style:dashed; }
+  .scenes .user-scene{ border-style:dashed; border-top-right-radius:0; border-bottom-right-radius:0; }
+  .scene-wrap{ display:inline-flex; align-items:stretch; }
+  .scene-del{ background:#1a1320; color:#cf9aa8; border:1px solid #4a2733; border-left:0;
+              border-radius:0 5px 5px 0; padding:0 9px; cursor:pointer; font:inherit; font-weight:700; line-height:1; }
+  .scene-del:hover{ color:#fff; background:#7a2533; border-color:#ff8f8f; }
+  .scene-del:focus-visible{ outline:2px solid #ff8f8f; outline-offset:-1px; }
   .editor textarea{ width:100%; background:#08080d; color:#9fb0c8; border:1px solid #23232f;
               border-radius:5px; font:11.5px/1.55 ui-monospace,Consolas,monospace; padding:9px 11px;
               resize:vertical; white-space:pre; overflow:auto; tab-size:2; }
@@ -163,16 +175,19 @@
       </div>
       <div class="controls">
         <input type="range" id="vol" min="0" max="100" value="62" aria-label="volume" title="volume">
-        <select id="speed" aria-label="speed" autocomplete="off">
-          <option value="rt">real-time + audio</option>
-          <option value="4000000">insane · 4000000 ip/s</option>
-          <option value="400000">turbo · 400000 ip/s</option>
-          <option value="40000">fast · 40000 ip/s</option>
-          <option value="4000">slow · 4000 ip/s</option>
-          <option value="400">crawl · 400 ip/s</option>
-          <option value="40">creep · 40 ip/s</option>
-          <option value="4">snail · 4 ip/s</option>
-        </select>
+        <div class="speedwrap">
+          <select id="speed" aria-label="speed" autocomplete="off">
+            <option value="rt">real-time + audio</option>
+            <option value="4000000">insane · 4000000 ip/s</option>
+            <option value="400000">turbo · 400000 ip/s</option>
+            <option value="40000">fast · 40000 ip/s</option>
+            <option value="4000">slow · 4000 ip/s</option>
+            <option value="400">crawl · 400 ip/s</option>
+            <option value="40">creep · 40 ip/s</option>
+            <option value="4">snail · 4 ip/s</option>
+          </select>
+          <label class="warp-lbl" title="Play pitch-shifted (varispeed) audio in the non-real-time speeds — fun near real-time, garbled at the extremes"><input type="checkbox" id="warpChk"> warp audio at other speeds</label>
+        </div>
         <button class="ctl" id="fs" type="button" title="Fullscreen video" aria-label="Fullscreen video">⛶ fullscreen</button>
       </div>
       <div class="transport">
@@ -197,6 +212,7 @@
         <canvas id="grid" width="466" height="470"></canvas>
       </div>
       <div class="panel" style="margin-top:14px;">
+        <label class="fs-show" title="Show this instruction preview as an overlay in fullscreen"><input type="checkbox" id="fsTraceChk"> Show in fullscreen</label>
         <div class="trace-head"><span class="t-ad">addr</span>   <span class="t-by">bytes</span>    <span class="t-mn">instruction</span></div>
         <div id="trace"></div>
         <div class="regs">
@@ -212,6 +228,8 @@
     <h2>Patch the program <span class="ed-sub">— edit the 256 bytes (file offsets, hex), then load &amp; restart</span></h2>
     <div class="presets">
       <button class="ctl" data-preset="original" type="button" title="Restore the official 256 bytes">Original</button>
+    </div>
+    <div class="presets">
       <span class="pgroup" data-name="length" title="byte $41 — the cpx #$3f that ends the song; pick one">
         <button class="ctl" data-preset="ext4x" type="button" title="$41: 3F → 90 — ~2.3× the runtime, then it still ends">Extended Life</button>
         <button class="ctl" data-preset="bornanddies" type="button" title="$41: 3F → FF — clock_msb never reaches the finale">A Mind is born and dies</button>
@@ -283,6 +301,7 @@ for(const s of scopeDefs){ s.ctx=s.cv.getContext('2d'); s.w=s.cv.width; s.h=s.cv
 
 let actx=null,node=null,gain=null,m=null, rd=null;
 let sampleRate=44100, samplesPerFrame=735, realtime=true, paused=false, speedIps=0, stepAccum=0;
+let warpAudio=false, warpRate=1;   // warp = play pitch-shifted (varispeed) audio in the non-real-time speeds
 let frameBuf=null, voiceBufs=null, phaseFrame=null, targetSamples=8192;
 const SCOPE_N=4096, SCOPE_MASK=SCOPE_N-1, SCOPE_SPAN=620;   // ring length, mask, samples drawn per trace (fewer cycles -> roomier, steadier)
 const scopeBufs=[0,1,2].map(()=>new Float32Array(SCOPE_N)); let scopeW=0;   // the 3 voices
@@ -329,21 +348,49 @@ class AmibSink extends AudioWorkletProcessor{
     return true; } }
 registerProcessor('amib-sink',AmibSink);`;
 const TARGET_LEAD_S=0.10;   // keep ~100 ms of audio queued ahead of playback; raise if any crackle remains
-// run the emulator forward to make ~`amount` samples, ship them to the sink, and feed the scopes
+const WARP_RT_IPS=300000;   // ~instructions/sec at real-time, for mapping the speed dropdown to a warp factor
+const clampWarp=x=>Math.min(4, Math.max(0.05, x));   // cap so 'insane' doesn't melt the CPU / go inaudible
+let warpMix=null, warpV=null, warpP=null;
+function ensureWarp(n){ if(!warpMix||warpMix.length<n){ warpMix=new Float32Array(n); warpV=[0,1,2].map(()=>new Float32Array(n)); warpP=[0,1,2].map(()=>new Float32Array(n)); } }
+// run the emulator forward to make ~`amount` output samples, ship them to the sink, and feed the scopes.
+// At warpRate=1 this is plain real-time; otherwise it generates the emulator's audio and resamples it to
+// real-time by warpRate (a varispeed / turntable pitch+tempo shift). Emulation itself is unchanged.
 function produce(amount){
   if(!node || !realtime || paused) return;
-  const spf=samplesPerFrame, frames=Math.max(1,Math.ceil(amount/spf)), buf=new Float32Array(frames*spf);
-  let off=0;
+  const spf=samplesPerFrame;
+  if(warpRate===1){
+    const frames=Math.max(1,Math.ceil(amount/spf)), buf=new Float32Array(frames*spf);
+    let off=0;
+    for(let f=0;f<frames;f++){
+      m.runFrame(); m.renderAudioSplit(frameBuf,voiceBufs,spf,phaseFrame);
+      buf.set(frameBuf.subarray(0,spf),off); off+=spf;
+      for(let i=0;i<spf;i++){   // same scope/phase capture the old push() did
+        scopeBufs[0][scopeW]=voiceBufs[0][i]; scopeBufs[1][scopeW]=voiceBufs[1][i]; scopeBufs[2][scopeW]=voiceBufs[2][i];
+        scopePhase[0][scopeW]=phaseFrame[0][i]; scopePhase[1][scopeW]=phaseFrame[1][i]; scopePhase[2][scopeW]=phaseFrame[2][i];
+        scopeW=(scopeW+1)&(SCOPE_N-1);
+      }
+    }
+    node.port.postMessage({type:'samples',buf},[buf.buffer]);
+    return;
+  }
+  // varispeed: generate whole frames of emulator audio, then resample emu -> output by warpRate
+  const frames=Math.max(1, Math.ceil(Math.ceil(amount*warpRate)/spf)), emu=frames*spf;
+  ensureWarp(emu);
   for(let f=0;f<frames;f++){
     m.runFrame(); m.renderAudioSplit(frameBuf,voiceBufs,spf,phaseFrame);
-    buf.set(frameBuf.subarray(0,spf),off); off+=spf;
-    for(let i=0;i<spf;i++){   // same scope/phase capture the old push() did
-      scopeBufs[0][scopeW]=voiceBufs[0][i]; scopeBufs[1][scopeW]=voiceBufs[1][i]; scopeBufs[2][scopeW]=voiceBufs[2][i];
-      scopePhase[0][scopeW]=phaseFrame[0][i]; scopePhase[1][scopeW]=phaseFrame[1][i]; scopePhase[2][scopeW]=phaseFrame[2][i];
-      scopeW=(scopeW+1)&(SCOPE_N-1);
-    }
+    const base=f*spf;
+    warpMix.set(frameBuf.subarray(0,spf),base);
+    for(let v=0;v<3;v++){ warpV[v].set(voiceBufs[v].subarray(0,spf),base); warpP[v].set(phaseFrame[v].subarray(0,spf),base); }
   }
-  node.port.postMessage({type:'samples',buf},[buf.buffer]);   // transfer (zero-copy)
+  const outN=Math.max(1, Math.round(emu/warpRate)), out=new Float32Array(outN), ratio=emu/outN;
+  for(let i=0;i<outN;i++){
+    const x=i*ratio, x0=x|0, fr=x-x0, x1=x0+1<emu?x0+1:emu-1;
+    out[i]=warpMix[x0]*(1-fr)+warpMix[x1]*fr;   // linear interpolation
+    scopeBufs[0][scopeW]=warpV[0][x0]; scopeBufs[1][scopeW]=warpV[1][x0]; scopeBufs[2][scopeW]=warpV[2][x0];
+    scopePhase[0][scopeW]=warpP[0][x0]; scopePhase[1][scopeW]=warpP[1][x0]; scopePhase[2][scopeW]=warpP[2][x0];
+    scopeW=(scopeW+1)&(SCOPE_N-1);
+  }
+  node.port.postMessage({type:'samples',buf:out},[out.buffer]);
 }
 // drop queued audio and re-prime from the current emulator position (restart / seek / resume)
 function flushAudio(){ if(node){ node.port.postMessage({type:'flush'}); produce(targetSamples); } }
@@ -402,10 +449,20 @@ screenFrame.addEventListener('click', ()=>{
 });
 $('vol').addEventListener('input', ()=>{ if(gain) gain.gain.value=$('vol').value/100; });
 function applySpeed(v){
-  if(v==='rt'){ realtime=true; if(actx && !paused) actx.resume(); flushAudio(); }
-  else { realtime=false; speedIps=+v; stepAccum=0; if(node) node.port.postMessage({type:'flush'}); }   // slow modes -> silence the sink
+  if(v==='rt'){ realtime=true; warpRate=1; if(actx && !paused) actx.resume(); flushAudio(); }
+  else if(warpAudio){                                  // varispeed: run audio-driven, pitch/tempo = warpRate
+    realtime=true; warpRate=clampWarp(+v/WARP_RT_IPS); if(actx && !paused) actx.resume(); flushAudio();
+  } else {                                             // silent instruction-stepping (the educational view)
+    realtime=false; speedIps=+v; stepAccum=0; warpRate=1; if(node) node.port.postMessage({type:'flush'});
+  }
 }
 $('speed').addEventListener('change', e=>applySpeed(e.target.value));
+const warpChk=$('warpChk');
+warpAudio = localStorage.getItem('amib_warp')==='1'; warpChk.checked = warpAudio;
+warpChk.addEventListener('change', ()=>{
+  warpAudio=warpChk.checked; localStorage.setItem('amib_warp', warpAudio?'1':'0');
+  applySpeed($('speed').value);                        // re-apply current speed under the new mode
+});
 applySpeed($('speed').value);   // sync state to whatever the browser restored (avoids a silent rt/slow mismatch on reload)
 
 // ---- byte editor + preset patcher --------------------------------------------------------
@@ -544,17 +601,25 @@ function renderScenes(){
   for(const sc of list){
     const b=document.createElement('button'); b.type='button'; b.className='ctl'+(sc.user?' user-scene':'');
     b.textContent=sc.name; b._pairs=sc.pairs; b._user=sc.user; b._name=sc.name;
-    b.title=(sc.user?'click to apply · Alt-click to delete\n':'')+pairsToStr(sc.pairs);
-    host.appendChild(b);
+    b.title=(sc.user?'click to apply':pairsToStr(sc.pairs))+(sc.user?'\n'+pairsToStr(sc.pairs):'');
+    if(sc.user){                                  // user scenes get a delete (×) handle
+      const wrap=document.createElement('span'); wrap.className='scene-wrap';
+      const del=document.createElement('button'); del.type='button'; del.className='scene-del';
+      del.textContent='×'; del.title='Delete scene “'+sc.name+'”'; del._del=sc.name;
+      wrap.appendChild(b); wrap.appendChild(del); host.appendChild(wrap);
+    } else host.appendChild(b);
   }
   refreshToggles(prgBytes);                       // set active highlights for the (re)built buttons
 }
+function deleteScene(name){
+  if(!window.confirm('Delete saved scene “'+name+'”?')) return;   // confirm before removing
+  saveUserScenes(loadUserScenes().filter(u=>u.name!==name)); renderScenes();
+  status('deleted scene · <span class="hot">'+name+'</span>');
+}
 $('sceneBtns').addEventListener('click', e=>{
+  const del=e.target.closest('.scene-del'); if(del){ deleteScene(del._del); return; }
   const b=e.target.closest('.ctl'); if(!b) return;
-  if(b._user && (e.altKey||e.metaKey)){           // Alt-click a user scene to delete it
-    saveUserScenes(loadUserScenes().filter(u=>u.name!==b._name)); renderScenes();
-    status('deleted scene · <span class="hot">'+b._name+'</span>'); return;
-  }
+  if(b._user && (e.altKey||e.metaKey)){ deleteScene(b._name); return; }   // Alt-click still deletes
   const bytes=Uint8Array.from(ORIG);              // apply onto original; click an active scene to revert
   if(!sceneMatches(prgBytes,b._pairs)) for(const [off,val] of b._pairs) bytes[off]=val;
   hexEl.value=toDump(bytes); loadPRG(bytes);
@@ -735,6 +800,18 @@ function onFsChange(){ const on=fsEl()===screenFrame;
   fsBtn.setAttribute('aria-label', fsBtn.title); }
 document.addEventListener('fullscreenchange', onFsChange);
 document.addEventListener('webkitfullscreenchange', onFsChange);
+
+// "Show in fullscreen" toggle (persisted) — controls whether the .fs-trace overlay appears in fullscreen
+const fsTraceChk=$('fsTraceChk');
+let hideFsTrace = localStorage.getItem('amib_hidefstrace')==='1';
+fsTraceChk.checked = !hideFsTrace;
+function applyFsTrace(){ screenFrame.classList.toggle('no-fs-trace', hideFsTrace); }
+applyFsTrace();
+fsTraceChk.addEventListener('change', ()=>{
+  hideFsTrace = !fsTraceChk.checked;
+  localStorage.setItem('amib_hidefstrace', hideFsTrace?'1':'0');
+  applyFsTrace();
+});
 
 // ---- 60 fps render of video + grid + trace + scope ----
 const PAL=[]; // built from C64.PALETTE indirectly via screen render; grid uses its own colours
