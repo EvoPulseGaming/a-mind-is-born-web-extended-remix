@@ -63,6 +63,9 @@
   .controls .speedwrap{ justify-self:center; display:flex; flex-direction:column; align-items:center; gap:5px; }
   .warp-lbl{ display:flex; align-items:center; gap:5px; color:var(--dim); font-size:11px; cursor:pointer; user-select:none; }
   .warp-lbl input{ accent-color:var(--accent); cursor:pointer; margin:0; }
+  .speed-custom{ width:130px; background:#14141c; color:var(--fg); border:1px solid #2a2a38; border-radius:5px;
+                 padding:5px 8px; font:inherit; font-size:12px; text-align:center; }
+  .speed-custom:hover,.speed-custom:focus{ border-color:var(--accent); outline:none; }
   .controls #fs{ justify-self:end; }
   @media(max-width:520px){   /* narrow: speed centered on top, volume + fullscreen below */
     .controls{ grid-template-columns:1fr 1fr; grid-template-areas:"speed speed" "vol fs"; row-gap:12px; }
@@ -177,15 +180,17 @@
         <input type="range" id="vol" min="0" max="100" value="62" aria-label="volume" title="volume">
         <div class="speedwrap">
           <select id="speed" aria-label="speed" autocomplete="off">
-            <option value="rt">real-time + audio</option>
             <option value="4000000">insane · 4000000 ip/s</option>
             <option value="400000">turbo · 400000 ip/s</option>
+            <option value="rt" selected>real-time + audio · 300000 ip/s</option>
+            <option value="250000">mellow · 250000 ip/s</option>
             <option value="40000">fast · 40000 ip/s</option>
             <option value="4000">slow · 4000 ip/s</option>
             <option value="400">crawl · 400 ip/s</option>
             <option value="40">creep · 40 ip/s</option>
             <option value="4">snail · 4 ip/s</option>
           </select>
+          <input type="number" id="speedCustom" class="speed-custom" min="1" step="1000" placeholder="custom ip/s" aria-label="custom speed in instructions per second" title="Type your own speed (instructions/sec) and press Enter">
           <label class="warp-lbl" title="Play pitch-shifted (varispeed) audio in the non-real-time speeds — fun near real-time, garbled at the extremes"><input type="checkbox" id="warpChk"> warp audio at other speeds</label>
         </div>
         <button class="ctl" id="fs" type="button" title="Fullscreen video" aria-label="Fullscreen video">⛶ fullscreen</button>
@@ -349,7 +354,7 @@ class AmibSink extends AudioWorkletProcessor{
 registerProcessor('amib-sink',AmibSink);`;
 const TARGET_LEAD_S=0.10;   // keep ~100 ms of audio queued ahead of playback; raise if any crackle remains
 const WARP_RT_IPS=300000;   // ~instructions/sec at real-time, for mapping the speed dropdown to a warp factor
-const clampWarp=x=>Math.min(4, Math.max(0.05, x));   // cap so 'insane' doesn't melt the CPU / go inaudible
+const clampWarp=x=>Math.min(4, Math.max(0.05, x));   // keep the resample sane: cap fast, floor slow
 let warpMix=null, warpV=null, warpP=null;
 function ensureWarp(n){ if(!warpMix||warpMix.length<n){ warpMix=new Float32Array(n); warpV=[0,1,2].map(()=>new Float32Array(n)); warpP=[0,1,2].map(()=>new Float32Array(n)); } }
 // run the emulator forward to make ~`amount` output samples, ship them to the sink, and feed the scopes.
@@ -373,7 +378,7 @@ function produce(amount){
     node.port.postMessage({type:'samples',buf},[buf.buffer]);
     return;
   }
-  // varispeed: generate whole frames of emulator audio, then resample emu -> output by warpRate
+  // varispeed: generate whole frames of emulator audio, then resample emu -> output by warpRate (pitch+tempo)
   const frames=Math.max(1, Math.ceil(Math.ceil(amount*warpRate)/spf)), emu=frames*spf;
   ensureWarp(emu);
   for(let f=0;f<frames;f++){
@@ -456,12 +461,30 @@ function applySpeed(v){
     realtime=false; speedIps=+v; stepAccum=0; warpRate=1; if(node) node.port.postMessage({type:'flush'});
   }
 }
-$('speed').addEventListener('change', e=>applySpeed(e.target.value));
+$('speed').addEventListener('change', e=>{ applySpeed(e.target.value); refreshToggles(prgBytes); });
+// pick a speed in the dropdown, creating a one-off "custom · N ip/s" option for non-standard values
+function selectSpeed(v){
+  const sel=$('speed'); v=String(v);
+  if(v!=='rt' && !sel.querySelector('option[value="'+v+'"]')){
+    let opt=sel.querySelector('option[data-custom]');
+    if(!opt){ opt=document.createElement('option'); opt.dataset.custom='1'; sel.appendChild(opt); }
+    opt.value=v; opt.textContent='custom · '+v+' ip/s';
+  }
+  sel.value=v;
+}
+const speedCustom=$('speedCustom');
+function setCustomSpeed(){
+  const v=parseInt(speedCustom.value,10);
+  if(!(v>0)){ return; }
+  selectSpeed(v); applySpeed($('speed').value); refreshToggles(prgBytes);
+}
+speedCustom.addEventListener('change', setCustomSpeed);
+speedCustom.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); setCustomSpeed(); } });
 const warpChk=$('warpChk');
 warpAudio = localStorage.getItem('amib_warp')==='1'; warpChk.checked = warpAudio;
 warpChk.addEventListener('change', ()=>{
   warpAudio=warpChk.checked; localStorage.setItem('amib_warp', warpAudio?'1':'0');
-  applySpeed($('speed').value);                        // re-apply current speed under the new mode
+  applySpeed($('speed').value); refreshToggles(prgBytes);   // re-apply speed + refresh scene highlights
 });
 applySpeed($('speed').value);   // sync state to whatever the browser restored (avoids a silent rt/slow mismatch on reload)
 
@@ -480,8 +503,9 @@ const PRESETS={
 // scenes: multi-byte combos applied as a whole (full diff from the original release).
 // Built-ins live in code; user scenes are saved to localStorage as change-strings.
 const BUILTIN_SCENES=[
-  {name:'Smooth ’n’ Slow', pairs:[[0x1a,0x08],[0x1c,0x14],[0x41,0x90],[0x59,0x3b],[0x67,0x08],[0x8d,0x1e],[0x91,0xdf]]},
-  {name:'Glitch Step',     pairs:[[0x1a,0x08],[0x1c,0x14],[0x67,0x08],[0x8d,0x58],[0x91,0xdf]]},
+  {name:'Smooth ’n’ Slow',       pairs:[[0x1a,0x08],[0x1c,0x14],[0x41,0x90],[0x59,0x3b],[0x67,0x08],[0x8d,0x1e],[0x91,0xdf]], speed:'rt', warp:false},
+  {name:'Turbo Smooth ’n’ Slow', pairs:[[0x1a,0x08],[0x1c,0x14],[0x41,0x90],[0x59,0x3b],[0x67,0x08],[0x8d,0x1e],[0x91,0xdf]], speed:'400000', warp:true},
+  {name:'Glitch Step',           pairs:[[0x1a,0x08],[0x1c,0x14],[0x41,0x90],[0x67,0x08],[0x8d,0x58],[0x91,0xdf]], speed:'rt', warp:false},
 ];
 const SCENE_KEY='amib_scenes';
 function sceneMatches(bytes, pairs){      // true if `bytes` == ORIG with exactly these pairs applied
@@ -489,6 +513,9 @@ function sceneMatches(bytes, pairs){      // true if `bytes` == ORIG with exactl
   const map=new Map(pairs);
   for(let i=0;i<bytes.length;i++){ const exp=map.has(i)?map.get(i):ORIG[i]; if(bytes[i]!==exp) return false; }
   return true;
+}
+function sceneActive(b){                   // a scene is active only if bytes AND speed AND warp all match
+  return sceneMatches(prgBytes, b._pairs) && ($('speed').value===(b._speed||'rt')) && (!!warpAudio===!!b._warp);
 }
 function strToPairs(s){                    // tolerant parse of "off=val,…" into [[off,val],…]
   const out=[]; s=(s||'').trim().replace(/^amib\d*:/i,'');
@@ -544,7 +571,7 @@ function refreshToggles(bytes){
     btn.classList.toggle('active', on);
   }
   for(const btn of document.querySelectorAll('#sceneBtns .ctl'))
-    btn.classList.toggle('active', sceneMatches(bytes, btn._pairs));
+    btn.classList.toggle('active', sceneActive(btn));
 }
 hexEl.value=toDump(prgBytes);
 refreshToggles(prgBytes);
@@ -594,14 +621,20 @@ for(const btn of document.querySelectorAll('.presets .ctl')){
   });
 }
 // scenes (built-in + user-saved): render buttons, apply combos, save current state, delete
+// set the speed dropdown + warp toggle from a scene (or back to default), then apply
+function applySceneState(speed, warp){
+  warpAudio=!!warp; warpChk.checked=warpAudio; localStorage.setItem('amib_warp', warpAudio?'1':'0');
+  selectSpeed(speed||'rt'); applySpeed($('speed').value);   // recreates a custom option if the scene used one
+  refreshToggles(prgBytes);                              // speed/warp affect which scene is "active"
+}
 function renderScenes(){
   const host=$('sceneBtns'); host.innerHTML='';
-  const list=[...BUILTIN_SCENES.map(s=>({name:s.name,pairs:s.pairs,user:false})),
-              ...loadUserScenes().map(u=>({name:u.name,pairs:strToPairs(u.str),user:true}))];
+  const list=[...BUILTIN_SCENES.map(s=>({name:s.name,pairs:s.pairs,user:false,speed:s.speed,warp:s.warp})),
+              ...loadUserScenes().map(u=>({name:u.name,pairs:strToPairs(u.str),user:true,speed:u.speed,warp:u.warp}))];
   for(const sc of list){
     const b=document.createElement('button'); b.type='button'; b.className='ctl'+(sc.user?' user-scene':'');
-    b.textContent=sc.name; b._pairs=sc.pairs; b._user=sc.user; b._name=sc.name;
-    b.title=(sc.user?'click to apply':pairsToStr(sc.pairs))+(sc.user?'\n'+pairsToStr(sc.pairs):'');
+    b.textContent=sc.name; b._pairs=sc.pairs; b._user=sc.user; b._name=sc.name; b._speed=sc.speed; b._warp=sc.warp;
+    b.title=(sc.user?'click to apply':pairsToStr(sc.pairs))+(sc.user?'\n'+pairsToStr(sc.pairs):'')+(sc.speed&&sc.speed!=='rt'?'\nspeed: '+sc.speed+(sc.warp?' (warp)':''):'');
     if(sc.user){                                  // user scenes get a delete (×) handle
       const wrap=document.createElement('span'); wrap.className='scene-wrap';
       const del=document.createElement('button'); del.type='button'; del.className='scene-del';
@@ -620,16 +653,18 @@ $('sceneBtns').addEventListener('click', e=>{
   const del=e.target.closest('.scene-del'); if(del){ deleteScene(del._del); return; }
   const b=e.target.closest('.ctl'); if(!b) return;
   if(b._user && (e.altKey||e.metaKey)){ deleteScene(b._name); return; }   // Alt-click still deletes
-  const bytes=Uint8Array.from(ORIG);              // apply onto original; click an active scene to revert
-  if(!sceneMatches(prgBytes,b._pairs)) for(const [off,val] of b._pairs) bytes[off]=val;
+  const on=sceneActive(b);                        // already active (bytes+speed+warp) -> toggle back to original
+  const bytes=Uint8Array.from(ORIG);
+  if(!on) for(const [off,val] of b._pairs) bytes[off]=val;
   hexEl.value=toDump(bytes); loadPRG(bytes);
+  applySceneState(on?'rt':b._speed, on?false:b._warp);   // restore the scene's speed/warp (or reset on toggle-off)
 });
 $('saveScene').addEventListener('click', ()=>{
-  const s=changeString();                         // whole-program diff from the release
-  if(!s){ status('nothing changed yet — pick a mode or nudge a knob first',true); return; }
+  const s=changeString(), speed=$('speed').value, warp=warpAudio;   // capture bytes + speed + warp
+  if(!s && speed==='rt' && !warp){ status('nothing to save — pick a mode, nudge a knob, or change the speed',true); return; }
   const name=(window.prompt('Name this scene','')||'').trim();
   if(!name) return;
-  const arr=loadUserScenes().filter(u=>u.name!==name); arr.push({name,str:s}); saveUserScenes(arr);
+  const arr=loadUserScenes().filter(u=>u.name!==name); arr.push({name,str:s,speed,warp}); saveUserScenes(arr);
   renderScenes();
   status('saved scene · <span class="hot">'+name+'</span>');
 });
