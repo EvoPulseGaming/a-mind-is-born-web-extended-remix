@@ -2,6 +2,7 @@
 // We don't ship ROMs; the handful of KERNAL entry points the demo calls are trapped in JS.
 import { CPU } from './cpu.js';
 import { SID } from './sid.js';
+import { SIDHermit } from './sid-hermit.js';
 
 const PAL_CLOCK = 985248;
 const IRQ_PERIOD = 16421;           // KERNAL CIA Timer-A reload -> ~60 Hz tick
@@ -21,6 +22,7 @@ export class C64 {
     this.color = new Uint8Array(0x400);   // color RAM $d800 (low nibble)
     this.cia1 = new Uint8Array(0x10);
     this.sid = new SID(sampleRate);
+    this.sidKind = 'approx';
     this.prg = prg;
     this.cpu = new CPU(this.rd.bind(this), this.wr.bind(this));
     this.sampleRate = sampleRate;
@@ -33,6 +35,18 @@ export class C64 {
     this.traceN = 64; this.traceAddr = new Uint16Array(this.traceN);
     this.traceKind = new Uint8Array(this.traceN); this.traceW = 0;
     this.init();
+  }
+
+  // Swap the SID synthesis core: 'approx' (built-in hand SID), '6581' or '8580' (Hermit's model).
+  // Carries the current register settings over so playback continues from the same chip state.
+  useSid(kind){
+    if(kind===this.sidKind) return;
+    const old=this.sid;
+    let next;
+    if(kind==='6581' || kind==='8580'){ next=new SIDHermit(this.sampleRate); next.model = kind==='8580'?8580:6581; }
+    else { next=new SID(this.sampleRate); kind='approx'; }
+    if(old){ for(let r=0;r<=0x18;r++) next.write(r, old.read(r)); }   // copy voice/filter registers
+    this.sid=next; this.sidKind=kind;
   }
 
   init(){

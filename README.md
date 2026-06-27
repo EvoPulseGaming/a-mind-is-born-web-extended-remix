@@ -61,6 +61,7 @@ Click ▶ to start (browsers require a gesture before audio).
 |------|------|
 | [`cpu.js`](cpu.js) | MOS 6510/6502 core — full legal set **plus** the undocumented opcodes the demo needs |
 | [`sid.js`](sid.js) | 6581 SID — 3 voices (tri/saw/pulse/noise + ADSR), resonant filter, OSC3/ENV3 read-back |
+| [`sid-hermit.js`](sid-hermit.js) | optional, more authentic **6581 / 8580** SID — ported from Hermit's jsSID (WTFPL) |
 | [`c64.js`](c64.js) | memory map, VIC-II extended-colour text rendering, 60 Hz IRQ, KERNAL traps |
 | [`disasm.js`](disasm.js) | 6502 disassembler (incl. illegals) for the live trace |
 | [`prg.js`](prg.js) | the exact 256 bytes, embedded |
@@ -74,7 +75,12 @@ Smoke test: `node test.mjs`.
 - **The SID is a faithful approximation, not [reSID](https://en.wikipedia.org/wiki/ReSID).** The
   melody, bass, drums and drone are all there and recognizable, and the filter is modelled, but a
   real 6581's exact analog filter curve and combined-waveform quirks are not fully reproduced.
-  Swapping in a reSID WASM core (keeping this VIC renderer) is the obvious path to note-perfect audio.
+- **Selectable SID core (UI).** Besides the built-in approximation you can switch to a more authentic
+  **6581** or **8580** model ([`sid-hermit.js`](sid-hermit.js)) — ported from Hermit's jsSID, with
+  *algorithmic* combined waveforms and per-model filter curves. It's pure JS (no blob) and uses no
+  GPL data, so it gets noticeably closer to a real chip without reSID's licensing. (reSID's exact
+  chip-sampled tables would be note-perfect but are GPL — intentionally not used here.) Note the
+  6581/8580 cores also change the **ENV3-driven visuals**, since the picture reads voice 3's envelope.
 
 ## Credits & licensing
 
@@ -87,6 +93,10 @@ Smoke test: `node test.mjs`.
 - The **emulator code** (`cpu.js`, `sid.js`, `c64.js`, `disasm.js`, `index.html`) is original and
   released under the **MIT License** — see [`LICENSE`](LICENSE) and
   [`reference/ATTRIBUTION.md`](reference/ATTRIBUTION.md).
+- The optional **6581/8580 SID** in [`sid-hermit.js`](sid-hermit.js) is ported from **jsSID** by
+  **Mihály Horváth (Hermit)** — <http://hermit.sidrip.com> — used under its **WTFPL** licence, with
+  credit retained as the author requests. Its combined-waveform model is algorithmic (reverse-
+  engineered from the SID schematic), not reSID's GPL chip-sampled tables.
 
 If you enjoy this, go watch the real thing on a real C64, and read Linus's
 [write-up](https://linusakesson.net/scene/a-mind-is-born/) — it is a masterpiece.

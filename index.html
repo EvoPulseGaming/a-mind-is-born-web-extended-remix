@@ -66,6 +66,8 @@
   .speed-custom{ width:130px; background:#14141c; color:var(--fg); border:1px solid #2a2a38; border-radius:5px;
                  padding:5px 8px; font:inherit; font-size:12px; text-align:center; }
   .speed-custom:hover,.speed-custom:focus{ border-color:var(--accent); outline:none; }
+  .sidbar{ display:flex; justify-content:flex-end; align-items:center; gap:16px; margin:8px 0 0; flex-wrap:wrap; }
+  .sidbar .sid-lbl{ display:flex; align-items:center; gap:7px; color:var(--dim); font-size:11px; }
   .controls #fs{ justify-self:end; }
   @media(max-width:520px){   /* narrow: speed centered on top, volume + fullscreen below */
     .controls{ grid-template-columns:1fr 1fr; grid-template-areas:"speed speed" "vol fs"; row-gap:12px; }
@@ -204,6 +206,15 @@
         <input type="range" id="barSeek" min="0" max="63" value="0" aria-label="seek section / bar">
         <span class="bar-now" id="barNow">0/63</span>
       </div>
+      <div class="sidbar">
+        <label class="sid-lbl">SID chip
+          <select id="sidModel" aria-label="SID emulation core" autocomplete="off" title="Which SID synthesis to use. 6581/8580 use Hermit's more authentic model (changes the sound — and the ENV3-driven visuals).">
+            <option value="approx">original (approx)</option>
+            <option value="6581">6581 (Hermit)</option>
+            <option value="8580">8580 (Hermit)</option>
+          </select>
+        </label>
+      </div>
       <div class="scopes">
         <div class="scope-row"><span class="scope-lbl" style="color:#ffb454">voice 1 · kick + bass</span><canvas id="scope1" width="640" height="118"></canvas></div>
         <div class="scope-row"><span class="scope-lbl" style="color:#6ad0ff">voice 2 · melody</span><canvas id="scope2" width="640" height="118"></canvas></div>
@@ -307,6 +318,7 @@ for(const s of scopeDefs){ s.ctx=s.cv.getContext('2d'); s.w=s.cv.width; s.h=s.cv
 let actx=null,node=null,gain=null,m=null, rd=null;
 let sampleRate=44100, samplesPerFrame=735, realtime=true, paused=false, speedIps=0, stepAccum=0;
 let warpAudio=false, warpRate=1;   // warp = play pitch-shifted (varispeed) audio in the non-real-time speeds
+let sidKind='approx';              // which SID synthesis core: 'approx' | '6581' | '8580'
 let frameBuf=null, voiceBufs=null, phaseFrame=null, targetSamples=8192;
 const SCOPE_N=4096, SCOPE_MASK=SCOPE_N-1, SCOPE_SPAN=620;   // ring length, mask, samples drawn per trace (fewer cycles -> roomier, steadier)
 const scopeBufs=[0,1,2].map(()=>new Float32Array(SCOPE_N)); let scopeW=0;   // the 3 voices
@@ -426,6 +438,7 @@ async function boot(){
   voiceBufs=[0,1,2].map(()=>new Float32Array(samplesPerFrame));
   phaseFrame=[0,1,2].map(()=>new Float32Array(samplesPerFrame));
   m=new C64(prgBytes,sampleRate); rd=m.rd.bind(m);   // emulator stays on the main thread, unchanged
+  m.useSid(sidKind);                                 // apply the chosen SID core
   targetSamples=Math.max(samplesPerFrame*2, Math.round(sampleRate*TARGET_LEAD_S));
   try{
     const url=URL.createObjectURL(new Blob([WORKLET_SRC],{type:'text/javascript'}));
@@ -487,6 +500,14 @@ warpChk.addEventListener('change', ()=>{
   applySpeed($('speed').value); refreshToggles(prgBytes);   // re-apply speed + refresh scene highlights
 });
 applySpeed($('speed').value);   // sync state to whatever the browser restored (avoids a silent rt/slow mismatch on reload)
+// SID core selector (original approx / Hermit 6581 / Hermit 8580), persisted
+const sidModelEl=$('sidModel');
+sidKind = localStorage.getItem('amib_sid'); if(['approx','6581','8580'].indexOf(sidKind)<0) sidKind='approx';
+sidModelEl.value=sidKind;
+sidModelEl.addEventListener('change', ()=>{
+  sidKind=sidModelEl.value; localStorage.setItem('amib_sid', sidKind);
+  if(m){ m.useSid(sidKind); flushAudio(); }   // swap live; re-prime the sink
+});
 
 // ---- byte editor + preset patcher --------------------------------------------------------
 // Offsets are into the raw .prg file (incl. the 2-byte load header), the same convention the
